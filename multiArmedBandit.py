@@ -78,7 +78,7 @@ class EpsilonDecreasing:
 
     def select_arm(self):
         self.t += 1
-        epsilon_t = self.epsilon_start / self.t
+        epsilon_t = self.epsilon_start * np.exp(-0.001 * self.t)
         
         if np.random.random() < epsilon_t:
             return np.random.randint(self.n_arms)
@@ -151,11 +151,11 @@ n_i = 50000
 bandit_commun = generate_random_bandit(n_m)
 regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
 regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
-regret_dec, _, _ = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
+regret_dec, agent_dec, moyennes_dec = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
 
 plt.figure(figsize=(10, 6))
 plt.plot(regret_eps, label="Epsilon-Greedy (ε=0.1)", color='red')
-plt.plot(regret_dec, label="Epsilon-Decreasing (ε=1/t)", color='green', linewidth=2)
+plt.plot(regret_dec, label="Epsilon-Decreasing", color='green', linewidth=2)
 plt.plot(regret_ucb, label="UCB1", color='blue')
 plt.title(f"Regret Cumulé : Epsilon-Greedy vs UCB ({n_m} machines)")
 plt.xlabel("Itérations")
@@ -164,5 +164,31 @@ plt.legend()
 plt.grid(True, linestyle='--', alpha=0.7)
 plt.show()
 
-print(f"Regret final Epsilon-Greedy : {regret_eps[-1]:.2f}")
-print(f"Regret final UCB : {regret_ucb[-1]:.2f}")
+print("\n" + "="*45)
+print("DÉTAILS DES MACHINES (BRAS)")
+print("="*45)
+
+nb_bras = len(moyennes_eps)
+index_meilleur = np.argmax(moyennes_eps)
+
+for i in range(nb_bras):
+    m_reelle = moyennes_eps[i]
+    suffixe = " <--- MEILLEUR RÉEL" if i == index_meilleur else ""
+    
+    print(f"Bras n°{i} | Réelle: {m_reelle:.4f} {suffixe}")
+
+print("\n" + "="*45)
+print("BILAN DES PERFORMANCES (REGRET FINAL)")
+print("="*45)
+print(f"Epsilon-Greedy (0.1)  : {regret_eps[-1]:.2f}")
+print(f"Epsilon-Decreasing (1/t): {regret_dec[-1]:.2f}")
+print(f"UCB1 : {regret_ucb[-1]:.2f}")
+
+choix_eps = np.argmax(agent_eps.values)
+choix_dec = np.argmax(agent_dec.values)
+choix_ucb = np.argmax(agent_ucb.values)
+
+print(f"Vrai meilleur bras (théorique) : n°{index_meilleur}")
+print(f"Choix final Epsilon-Greedy     : n°{choix_eps}")
+print(f"Choix final Epsilon-Decreasing : n°{choix_dec}")
+print(f"Choix final UCB1               : n°{choix_ucb}")
