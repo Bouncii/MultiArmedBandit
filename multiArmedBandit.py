@@ -66,6 +66,35 @@ class UCB:
         new_moy = moy + (1 / n) * (reward - moy)
         self.values[arm_index] = new_moy
 
+
+class EpsilonDecreasing:
+    def __init__(self, n_arms, epsilon=1.0):
+        self.n_arms = n_arms
+        self.epsilon_start = epsilon
+        self.t = 0
+        
+        self.counts = np.zeros(n_arms)
+        self.values = np.zeros(n_arms)
+
+    def select_arm(self):
+        self.t += 1
+        epsilon_t = self.epsilon_start / self.t
+        
+        if np.random.random() < epsilon_t:
+            return np.random.randint(self.n_arms)
+        else:
+            return np.argmax(self.values)
+
+    def update(self, arm_index, reward):
+        self.counts[arm_index] += 1
+        n = self.counts[arm_index]
+        
+        moy = self.values[arm_index]
+        new_moy = moy + (1 / n) * (reward - moy)
+        self.values[arm_index] = new_moy
+
+
+
 def randomNumberArray(n:int):
     rng = np.random.default_rng()
     return rng.random(n)
@@ -117,14 +146,16 @@ def test(nb_machines, nb_iter, algo_class,bandit_fixe=None):
 
     return historique_regret, agent, moyennes
 
-n_m = 5
-n_i = 30000
+n_m = 10
+n_i = 50000
 bandit_commun = generate_random_bandit(n_m)
-regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy)
-regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB)
+regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
+regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
+regret_dec, _, _ = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
 
 plt.figure(figsize=(10, 6))
 plt.plot(regret_eps, label="Epsilon-Greedy (ε=0.1)", color='red')
+plt.plot(regret_dec, label="Epsilon-Decreasing (ε=1/t)", color='green', linewidth=2)
 plt.plot(regret_ucb, label="UCB1", color='blue')
 plt.title(f"Regret Cumulé : Epsilon-Greedy vs UCB ({n_m} machines)")
 plt.xlabel("Itérations")
