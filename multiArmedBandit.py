@@ -1,5 +1,5 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 class Bras:
     def __init__(self, possibilites, probas):
@@ -41,34 +41,97 @@ class EpsilonGreedy:
         self.values[arm_index] = new_moy
 
 
+class UCB:
+    def __init__(self, n_arms):
+        self.n_arms = n_arms
+        self.counts = np.zeros(n_arms)
+        self.values = np.zeros(n_arms)
+        self.t = 0
+
+    def select_arm(self):
+        self.t += 1
+
+        if self.t <= self.n_arms:
+            return np.argmin(self.counts) #on tire une fois chaque bras pour eviter la division par 0
+        
+        bonus = np.sqrt(2*np.log(self.t) / self.counts)
+        ucb_values = self.values + bonus
+        return np.argmax(ucb_values)
+
+    def update(self, arm_index, reward):
+        self.counts[arm_index] += 1
+        n = self.counts[arm_index]
+
+        moy = self.values[arm_index]
+        new_moy = moy + (1 / n) * (reward - moy)
+        self.values[arm_index] = new_moy
+
+def randomNumberArray(n:int):
+    rng = np.random.default_rng()
+    return rng.random(n)
 
 
+def randomProbabilityArray(n: int):
+    rng = np.random.default_rng()
+    q = rng.random(n)
+    Q = np.sum(q)
+    p = q / Q
+    return p
 
-bras_0 = Bras([0.05, 0.1, 0.15, 0.2 ], [0.3, 0.4, 0.2, 0.1])
-bras_1 = Bras([0.1, 0.12, 0.9], [0.45, 0.5, 0.05])
-bras_2 = Bras([0.0, 0.3], [0.5, 0.5])
 
-bras_list = [bras_0, bras_1, bras_2]
-bandit = MultiArmedBandit(bras_list)
-agent = EpsilonGreedy(3, 0.1)
+def generate_random_bandit(nb_machines):
+    bras_list = []
+    
+    for _ in range(nb_machines):
+        n_outcomes = np.random.randint(2, 6)
+        possibilites = randomNumberArray(n_outcomes)
+        probas = randomProbabilityArray(n_outcomes)
+        bras_list.append(Bras(possibilites, probas))
+        
+    return MultiArmedBandit(bras_list)
 
-moyennes = [b.moyenne for b in bras_list]
-meilleure_moyenne = max(moyennes)
-meilleur_bras_theorique = np.argmax(moyennes)
 
-n_iterations = 1000
-regret = 0
-for i in range(n_iterations):
-    bras = agent.select_arm()
-    reward = bandit.pull_bras(bras)
-    agent.update(bras, reward)
+def test(nb_machines, nb_iter, algo_class,bandit_fixe=None):
+    
+    
+    if bandit_fixe is None:
+        bandit = generate_random_bandit(nb_machines)
+    else:
+        bandit = bandit_fixe
 
-    regret += meilleure_moyenne - bras_list[bras].moyenne
+    agent = algo_class(nb_machines)
+    
+    moyennes = [b.moyenne for b in bandit.bras]
+    meilleure_moyenne = max(moyennes)
+    
+    regret_cumule = 0
+    historique_regret = []
 
-print("Résultats après", n_iterations, "itérations :")
-for i, val in enumerate(agent.values):
-    print(f"Bras {i} : Estimé = {val} | Tiré {int(agent.counts[i])} fois")
+    for _ in range(nb_iter):
+        choix = agent.select_arm()
+        reward = bandit.pull_bras(choix)
+        agent.update(choix, reward)
+        
+        regret_cumule += meilleure_moyenne - bandit.bras[choix].moyenne
+        historique_regret.append(regret_cumule)
 
-best_arm = np.argmax(agent.values)
-print(f"L'agent pense que le meilleur bras est le n°{best_arm}")
-print(f"le regret est de : {regret}")
+    return historique_regret, agent, moyennes
+
+n_m = 5
+n_i = 30000
+bandit_commun = generate_random_bandit(n_m)
+regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy)
+regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB)
+
+plt.figure(figsize=(10, 6))
+plt.plot(regret_eps, label="Epsilon-Greedy (ε=0.1)", color='red')
+plt.plot(regret_ucb, label="UCB1", color='blue')
+plt.title(f"Regret Cumulé : Epsilon-Greedy vs UCB ({n_m} machines)")
+plt.xlabel("Itérations")
+plt.ylabel("Regret Cumulé")
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.show()
+
+print(f"Regret final Epsilon-Greedy : {regret_eps[-1]:.2f}")
+print(f"Regret final UCB : {regret_ucb[-1]:.2f}")
