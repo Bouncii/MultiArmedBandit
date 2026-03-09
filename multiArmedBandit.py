@@ -138,6 +138,20 @@ def generate_random_bandit(nb_machines):
         
     return MultiArmedBandit(bras_list)
 
+def generate_near_bandit(nb_machines, gap=0.01):
+    bras_list = []
+    base_mean = 0.5
+    for i in range(nb_machines):
+        if i == 0 :
+            mean = base_mean + gap  
+        elif i ==2:
+            mean = base_mean - gap  
+        else :
+            mean = base_mean
+        bras_list.append(Bras([0, 1], [1 - mean, mean]))
+        
+    return MultiArmedBandit(bras_list)
+
 
 def test(nb_machines, nb_iter, algo_class,bandit_fixe=None):
     
@@ -169,8 +183,8 @@ def test(nb_machines, nb_iter, algo_class,bandit_fixe=None):
     return historique_regret, agent, moyennes
 
 n_m = 10
-n_i = 25000
-bandit_commun = generate_random_bandit(n_m)
+n_i = 100000
+bandit_commun = generate_near_bandit(n_m)
 regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
 regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
 regret_dec, agent_dec, moyennes_dec = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
