@@ -147,7 +147,7 @@ def test(nb_machines, nb_iter, algo_class,bandit_fixe=None):
     return historique_regret, agent, moyennes
 
 n_m = 10
-n_i = 50000
+n_i = 25000
 bandit_commun = generate_random_bandit(n_m)
 regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
 regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
@@ -157,16 +157,16 @@ plt.figure(figsize=(10, 6))
 plt.plot(regret_eps, label="Epsilon-Greedy (ε=0.1)", color='red')
 plt.plot(regret_dec, label="Epsilon-Decreasing", color='green', linewidth=2)
 plt.plot(regret_ucb, label="UCB1", color='blue')
-plt.title(f"Regret Cumulé : Epsilon-Greedy vs UCB ({n_m} machines)")
+plt.title(f"Regret Cumulé : Multi Armed Bandit ({n_m} machines)")
 plt.xlabel("Itérations")
 plt.ylabel("Regret Cumulé")
 plt.legend()
 plt.grid(True, linestyle='--', alpha=0.7)
 plt.show()
 
-print("\n" + "="*45)
+print("\n" + "-"*45)
 print("DÉTAILS DES MACHINES (BRAS)")
-print("="*45)
+print("-"*45)
 
 nb_bras = len(moyennes_eps)
 index_meilleur = np.argmax(moyennes_eps)
@@ -177,11 +177,11 @@ for i in range(nb_bras):
     
     print(f"Bras n°{i} | Réelle: {m_reelle:.4f} {suffixe}")
 
-print("\n" + "="*45)
+print("\n" + "-"*45)
 print("BILAN DES PERFORMANCES (REGRET FINAL)")
-print("="*45)
+print("-"*45)
 print(f"Epsilon-Greedy (0.1)  : {regret_eps[-1]:.2f}")
-print(f"Epsilon-Decreasing (1/t): {regret_dec[-1]:.2f}")
+print(f"Epsilon-Decreasing : {regret_dec[-1]:.2f}")
 print(f"UCB1 : {regret_ucb[-1]:.2f}")
 
 choix_eps = np.argmax(agent_eps.values)
