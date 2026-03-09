@@ -93,7 +93,26 @@ class EpsilonDecreasing:
         new_moy = moy + (1 / n) * (reward - moy)
         self.values[arm_index] = new_moy
 
+class EXP3:
+    def __init__(self, n_arms, n_iters):
+        self.n_arms = n_arms
+        self.n_iters = n_iters
+        self.gamma = min(1, np.sqrt(abs(n_arms * np.log(n_arms) / ((np.e - 1) * n_iters))))
+        self.weights = np.ones(n_arms)
+        self.probs = np.zeros(n_arms)
 
+    def select_arm(self):
+        sum_weights = np.sum(self.weights)
+        self.probs = (1 - self.gamma) * (self.weights / sum_weights) + (self.gamma / self.n_arms)  
+        self.probs /= self.probs.sum() 
+        return np.random.choice(self.n_arms, p=self.probs)
+
+    def update(self, arm_index, reward):
+        estimated_reward = reward / self.probs[arm_index]
+        factor = np.exp(self.gamma * estimated_reward / self.n_arms)
+        self.weights[arm_index] *= factor
+        if self.weights[arm_index] > 1e100:
+            self.weights /= 1e100
 
 def randomNumberArray(n:int):
     rng = np.random.default_rng()
@@ -128,7 +147,10 @@ def test(nb_machines, nb_iter, algo_class,bandit_fixe=None):
     else:
         bandit = bandit_fixe
 
-    agent = algo_class(nb_machines)
+    if algo_class == EXP3:
+        agent = algo_class(nb_machines, nb_iter)
+    else:
+        agent = algo_class(nb_machines)
     
     moyennes = [b.moyenne for b in bandit.bras]
     meilleure_moyenne = max(moyennes)
@@ -152,11 +174,15 @@ bandit_commun = generate_random_bandit(n_m)
 regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
 regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
 regret_dec, agent_dec, moyennes_dec = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
+regret_exp3, agent_exp3, moyennes_exp3 = test(n_m, n_i, EXP3, bandit_commun)
+
 
 plt.figure(figsize=(10, 6))
 plt.plot(regret_eps, label="Epsilon-Greedy (ε=0.1)", color='red')
 plt.plot(regret_dec, label="Epsilon-Decreasing", color='green', linewidth=2)
 plt.plot(regret_ucb, label="UCB1", color='blue')
+plt.plot(regret_exp3, label="EXP3 (Adversarial)", color='orange', linewidth=2)
+
 plt.title(f"Regret Cumulé : Multi Armed Bandit ({n_m} machines)")
 plt.xlabel("Itérations")
 plt.ylabel("Regret Cumulé")
@@ -183,12 +209,13 @@ print("-"*45)
 print(f"Epsilon-Greedy (0.1)  : {regret_eps[-1]:.2f}")
 print(f"Epsilon-Decreasing : {regret_dec[-1]:.2f}")
 print(f"UCB1 : {regret_ucb[-1]:.2f}")
+print(f"EXP3 : {regret_exp3[-1]:.2f}")
 
 choix_eps = np.argmax(agent_eps.values)
 choix_dec = np.argmax(agent_dec.values)
 choix_ucb = np.argmax(agent_ucb.values)
 
 print(f"Vrai meilleur bras (théorique) : n°{index_meilleur}")
-print(f"Choix final Epsilon-Greedy     : n°{choix_eps}")
+print(f"Choix final Epsilon-Greedy : n°{choix_eps}")
 print(f"Choix final Epsilon-Decreasing : n°{choix_dec}")
-print(f"Choix final UCB1               : n°{choix_ucb}")
+print(f"Choix final UCB1 : n°{choix_ucb}")
