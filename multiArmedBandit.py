@@ -9,6 +9,31 @@ class Bras:
 
     def pull(self):
         return np.random.choice(self.possibilites, p=self.probas)
+    
+class MovingBras(Bras):
+    def __init__(self, poss1, prob1, poss2, prob2, p_switch):
+        self.dist1 = (np.array(poss1), np.array(prob1))
+        self.dist2 = (np.array(poss2), np.array(prob2))
+        self.moy1 = np.sum(self.dist1[0] * self.dist1[1])
+        self.moy2 = np.sum(self.dist2[0] * self.dist2[1])
+        self.p_switch = p_switch 
+        self.etat_actuel = 0 
+        super().__init__(poss1, prob1)
+
+    def actualiser_etat(self):
+        if np.random.random() < self.p_switch:
+            self.etat_actuel = 0
+            self.moyenne = self.moy1
+        else:
+            self.etat_actuel = 1
+            self.moyenne = self.moy2
+
+    def pull(self):
+        if self.etat_actuel == 0:
+            poss, prob = self.dist1  
+        else:
+            poss, prob = self.dist2
+        return np.random.choice(poss, p=prob)
 
 class MultiArmedBandit:
     def __init__(self, bras):
@@ -152,10 +177,21 @@ def generate_near_bandit(nb_machines, gap=0.01):
         
     return MultiArmedBandit(bras_list)
 
+def generate_switching_bandit(nb_machines):
+    bras_list = []
 
-def test(nb_machines, nb_iter, algo_class,bandit_fixe=None):
-    
-    
+    for _ in range(nb_machines):
+        n_outcomes1 = np.random.randint(2, 6)
+        n_outcomes2 = np.random.randint(2, 6)
+        poss1 = randomNumberArray(n_outcomes1)
+        prob1 = randomProbabilityArray(n_outcomes1)
+        poss2 = randomNumberArray(n_outcomes2)
+        prob2 = randomProbabilityArray(n_outcomes2)
+        bras_list.append(MovingBras(poss1, prob1, poss2, prob2, 0.6)) 
+    return MultiArmedBandit(bras_list)
+
+
+def test(nb_machines, nb_iter, algo_class, bandit_fixe=None):
     if bandit_fixe is None:
         bandit = generate_random_bandit(nb_machines)
     else:
@@ -166,25 +202,29 @@ def test(nb_machines, nb_iter, algo_class,bandit_fixe=None):
     else:
         agent = algo_class(nb_machines)
     
-    moyennes = [b.moyenne for b in bandit.bras]
-    meilleure_moyenne = max(moyennes)
-    
     regret_cumule = 0
     historique_regret = []
 
-    for _ in range(nb_iter):
+    for t in range(nb_iter):
+        for b in bandit.bras:
+            if isinstance(b, MovingBras):
+                b.actualiser_etat()
+        
+        moyennes_instantanées = [b.moyenne for b in bandit.bras]
+        meilleure_moyenne_t = max(moyennes_instantanées)
+        
         choix = agent.select_arm()
         reward = bandit.pull_bras(choix)
         agent.update(choix, reward)
         
-        regret_cumule += meilleure_moyenne - bandit.bras[choix].moyenne
+        regret_cumule += meilleure_moyenne_t - bandit.bras[choix].moyenne
         historique_regret.append(regret_cumule)
 
-    return historique_regret, agent, moyennes
+    return historique_regret, agent, moyennes_instantanées
 
 n_m = 10
-n_i = 100000
-bandit_commun = generate_near_bandit(n_m)
+n_i = 25000
+bandit_commun = generate_switching_bandit(n_m)
 regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
 regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
 regret_dec, agent_dec, moyennes_dec = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
