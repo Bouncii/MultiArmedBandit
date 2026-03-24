@@ -11,29 +11,21 @@ class Bras:
         return np.random.choice(self.possibilites, p=self.probas)
     
 class MovingBras(Bras):
-    def __init__(self, poss1, prob1, poss2, prob2, p_switch):
-        self.dist1 = (np.array(poss1), np.array(prob1))
-        self.dist2 = (np.array(poss2), np.array(prob2))
-        self.moy1 = np.sum(self.dist1[0] * self.dist1[1])
-        self.moy2 = np.sum(self.dist2[0] * self.dist2[1])
-        self.p_switch = p_switch 
-        self.etat_actuel = 0 
-        super().__init__(poss1, prob1)
+    def __init__(self, possibilites, fonction_probas):
+        self.possibilites = np.array(possibilites)
+        self.fonction_probas = fonction_probas
+        self.t = 0 
+        
+        self.probas = np.array(self.fonction_probas(self.t))
+        self.moyenne = np.sum(self.possibilites * self.probas)
 
     def actualiser_etat(self):
-        if np.random.random() < self.p_switch:
-            self.etat_actuel = 0
-            self.moyenne = self.moy1
-        else:
-            self.etat_actuel = 1
-            self.moyenne = self.moy2
+        self.t += 1
+        self.probas = np.array(self.fonction_probas(self.t))
+        self.moyenne = np.sum(self.possibilites * self.probas)
 
     def pull(self):
-        if self.etat_actuel == 0:
-            poss, prob = self.dist1  
-        else:
-            poss, prob = self.dist2
-        return np.random.choice(poss, p=prob)
+        return np.random.choice(self.possibilites, p=self.probas)
 
 class MultiArmedBandit:
     def __init__(self, bras):
@@ -191,6 +183,36 @@ def generate_switching_bandit(nb_machines):
     return MultiArmedBandit(bras_list)
 
 
+def generate_regime_switch_bandit(nb_machines, total_iters):
+    bras_list = []
+    mid = total_iters // 2
+    
+    for i in range(nb_machines):
+        def create_p_func(arm_idx):
+            def p_regime(t):
+                if arm_idx == 0: 
+                    if t < mid :
+                        p_succes = 0.8
+                    else:
+                        p_succes =0.1
+                elif arm_idx == 1: 
+                    if t < mid :
+                        p_succes = 0.1
+                    else:
+                        p_succes =0.8
+                else: 
+                    p_succes = 0.5
+                
+                return [1.0 - p_succes, p_succes]
+            return p_regime
+            
+        fonction_probas = create_p_func(i)
+        bras_list.append(MovingBras([0, 1], fonction_probas))
+        
+    return MultiArmedBandit(bras_list)
+
+
+
 def test(nb_machines, nb_iter, algo_class, bandit_fixe=None):
     if bandit_fixe is None:
         bandit = generate_random_bandit(nb_machines)
@@ -224,7 +246,7 @@ def test(nb_machines, nb_iter, algo_class, bandit_fixe=None):
 
 n_m = 10
 n_i = 25000
-bandit_commun = generate_switching_bandit(n_m)
+bandit_commun = generate_regime_switch_bandit(n_m,n_i)
 regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
 regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
 regret_dec, agent_dec, moyennes_dec = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
