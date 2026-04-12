@@ -24,11 +24,16 @@ struct location
 
 typedef struct location *Possibilities;
 
-struct tree
+struct node
 {
-    float info;
-    struct tree *fg;
-    struct tree *fd;
+    Coordinate move;
+    int visits;
+    float score;
+    
+    Possibilities possibles;
+    
+    struct node *child;
+    struct node *sibling;
 };
 
-typedef struct tree *tree;
+typedef struct node *Tree;
