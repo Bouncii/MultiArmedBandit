@@ -114,7 +114,7 @@ class EXP3:
     def __init__(self, n_arms, n_iters):
         self.n_arms = n_arms
         self.n_iters = n_iters
-        self.gamma = min(1, np.sqrt(abs(n_arms * np.log(n_arms) / ((np.e - 1) * n_iters))))
+        self.gamma = 0.2
         self.weights = np.ones(n_arms)
         self.probs = np.zeros(n_arms)
 
@@ -128,8 +128,8 @@ class EXP3:
         estimated_reward = reward / self.probs[arm_index]
         factor = np.exp(self.gamma * estimated_reward / self.n_arms)
         self.weights[arm_index] *= factor
-        if self.weights[arm_index] > 1e100:
-            self.weights /= 1e100
+        self.weights /= np.sum(self.weights)
+        self.weights = np.maximum(self.weights, 1e-15)
 
 def randomNumberArray(n:int):
     rng = np.random.default_rng()
@@ -182,29 +182,30 @@ def generate_switching_bandit(nb_machines): #
     return MultiArmedBandit(bras_list)
 
 
-def generate_regime_switch_bandit(nb_machines, total_iters):
+def generate_regime_switch_bandit(nb_machines, total_iters, transition_duration):
     bras_list = []
     mid = total_iters // 2
     
     for i in range(nb_machines):
         def create_p_func(arm_idx):
-            def p_regime(t):
-                if arm_idx == 0: 
-                    if t < mid :
-                        p_succes = 0.8
-                    else:
-                        p_succes =0.1
-                elif arm_idx == 1: 
-                    if t < mid :
-                        p_succes = 0.1
-                    else:
-                        p_succes =0.8
-                else: 
-                    p_succes = 0.5
+            if arm_idx == 0: 
+                p_start, p_end = 0.9, 0.3
+            elif arm_idx == 2: 
+                p_start, p_end = 0.5, 0.9
+            else: 
+                p_start, p_end = 0.4, 0.5
                 
+            def p_regime(t):
+                if t <= mid:
+                    p_succes = p_start
+                elif t >= mid + transition_duration:
+                    p_succes = p_end
+                else:
+                    progression = (t - mid) / transition_duration
+                    p_succes = p_start + (p_end - p_start) * progression
+                    
                 return [1.0 - p_succes, p_succes]
             return p_regime
-            
         fonction_probas = create_p_func(i)
         bras_list.append(MovingBras([0, 1], fonction_probas))
         
@@ -245,11 +246,17 @@ def test(nb_machines, nb_iter, algo_class, bandit_fixe=None):
 
 n_m = 10
 n_i = 25000
-bandit_commun = generate_regime_switch_bandit(n_m,n_i)
-regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
-regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
-regret_dec, agent_dec, moyennes_dec = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
-regret_exp3, agent_exp3, moyennes_exp3 = test(n_m, n_i, EXP3, bandit_commun)
+duree_transition = 0.15*n_i
+# bandit_commun = generate_regime_switch_bandit(n_m, n_i, duree_transition)
+# regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy,bandit_commun)
+# regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB,bandit_commun)
+# regret_dec, agent_dec, moyennes_dec = test(n_m, n_i, EpsilonDecreasing, bandit_commun)
+# regret_exp3, agent_exp3, moyennes_exp3 = test(n_m, n_i, EXP3, bandit_commun)
+
+regret_eps, agent_eps, moyennes_eps = test(n_m, n_i, EpsilonGreedy, generate_regime_switch_bandit(n_m, n_i, duree_transition))
+regret_ucb, agent_ucb, moyennes_ucb = test(n_m, n_i, UCB, generate_regime_switch_bandit(n_m, n_i, duree_transition))
+regret_dec, agent_dec, moyennes_dec = test(n_m, n_i, EpsilonDecreasing, generate_regime_switch_bandit(n_m, n_i, duree_transition))
+regret_exp3, agent_exp3, moyennes_exp3 = test(n_m, n_i, EXP3, generate_regime_switch_bandit(n_m, n_i, duree_transition))
 
 
 plt.figure(figsize=(10, 6))
