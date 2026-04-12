@@ -169,9 +169,8 @@ def generate_near_bandit(nb_machines, gap=0.01):
         
     return MultiArmedBandit(bras_list)
 
-def generate_switching_bandit(nb_machines):
+def generate_switching_bandit(nb_machines): # 
     bras_list = []
-
     for _ in range(nb_machines):
         n_outcomes1 = np.random.randint(2, 6)
         n_outcomes2 = np.random.randint(2, 6)
