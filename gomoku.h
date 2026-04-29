@@ -26,14 +26,19 @@ typedef struct location *Possibilities;
 
 struct node
 {
-    Coordinate move;
-    int visits;
-    float score;
+    Coordinate move; // Le coup qui a mené à ce noeud (inutile pour le noeud racine)
+    Case playerTurn; // Le joueur qui a joué ce coup (Player ou Bot)
     
-    Possibilities possibles;
+    int nbTest;  //Nombre de fois que ce noeud a été visité
+    float score; // Nombre de victoires (on utilise un float pour gérer les matchs nuls éventuels)
     
-    struct node *child;
-    struct node *sibling;
+    Possibilities untriedMoves; // Les coups légaux qu'il reste à explorer depuis cette position
+    
+    struct node **children;// Tableau dynamique de pointeurs vers les noeuds enfants
+    int numChildren; //Le nombre d'enfants actuellement dans le tableau
+    int maxChildren; // La capacité actuelle du tableau
+    
+    struct node *parent;// Pointeur vers le parent
 };
 
 typedef struct node *Tree;
