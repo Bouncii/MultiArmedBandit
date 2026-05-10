@@ -292,6 +292,7 @@ Case simulate(Grid grid, Case nextToPlay) {
         }
     }
 
+    // Mélange initial des cases vides
     for (int i = nbEmpty - 1; i > 0; i--) {
         int j = randint(0, i);
         Coordinate temp = emptyCases[i];
@@ -299,20 +300,44 @@ Case simulate(Grid grid, Case nextToPlay) {
         emptyCases[j] = temp;
     }
 
-    Case winner = isWinner(tempGrid);
     Case currentPlayer = nextToPlay;
-    int index = 0;
 
-    while (winner == empty && index < nbEmpty) {
-        Coordinate move = emptyCases[index];
+    while (nbEmpty > 0) {
+        Coordinate move = {-1, -1};
+        int moveIndex = -1;
+
+        for (int i = 0; i < nbEmpty; i++) {
+            if (isWinningMove(tempGrid, emptyCases[i], currentPlayer)) {
+                move = emptyCases[i];
+                moveIndex = i;
+                break;
+            }
+        }
+
+        if (moveIndex == -1) {
+            Case opponent = (currentPlayer == Bot) ? Player : Bot;
+            for (int i = 0; i < nbEmpty; i++) {
+                if (isWinningMove(tempGrid, emptyCases[i], opponent)) {
+                    move = emptyCases[i];
+                    moveIndex = i;
+                    break;
+                }
+            }
+        }
+        if (moveIndex == -1) {
+            moveIndex = nbEmpty - 1;
+            move = emptyCases[moveIndex];
+        }
         placePawn(tempGrid, currentPlayer, move);
-        
-        winner = isWinner(tempGrid);
+        if (isWinningMove(tempGrid, move, currentPlayer)) {
+            return currentPlayer;
+        }
+        emptyCases[moveIndex] = emptyCases[nbEmpty - 1];
+        nbEmpty--;
         currentPlayer = (currentPlayer == Bot) ? Player : Bot;
-        
-        index++; 
     }
-    return winner;
+    
+    return empty; // Plus de place = match nul
 }
 
 //Fonction qui sert à remonter dans l'arbre après une simulation
@@ -327,12 +352,8 @@ void backpropagate(Tree node, Case winner) {
         else if (winner == current->playerTurn) {
             current->score += 1.0; 
         } 
-        else {
-            if (current->playerTurn == Bot && winner == Player) {
-                current->score -= 10000.0;
-            } else {
-                current->score -= 1.0;
-            }
+        else{
+            current->score -= 1.0;
         }
         
         current = current->parent;
@@ -464,6 +485,34 @@ Coordinate mcts_ai_turn(Grid grid, int iterations, Tree root) {
     return getBestMove(root);
 }
 
+bool isWinningMove(Grid g, Coordinate c, Case player) {
+    int dx[] = {1, 0, 1, 1}; 
+    int dy[] = {0, 1, 1, -1};
+
+    for (int dir = 0; dir < 4; dir++) {
+        int count = 1;
+
+        for (int step = 1; step < VICTORY; step++) {
+            int nx = c.ligne + step * dx[dir];
+            int ny = c.colonne + step * dy[dir];
+            if (nx >= 0 && nx < SIZE && ny >= 0 && ny < SIZE && g[nx][ny] == player) {
+                count++;
+            } else break;
+        }
+        // Regarder dans le sens opposé
+        for (int step = 1; step < VICTORY; step++) {
+            int nx = c.ligne - step * dx[dir];
+            int ny = c.colonne - step * dy[dir];
+            if (nx >= 0 && nx < SIZE && ny >= 0 && ny < SIZE && g[nx][ny] == player) {
+                count++;
+            } else break;
+        }
+
+        if (count >= VICTORY) return true;
+    }
+    return false;
+}
+
 bool hasNeighbor(Grid grid, int r, int c) {
     for (int i = -2; i <= 2; i++) {
         for (int j = -2; j <= 2; j++) {
@@ -486,12 +535,8 @@ Coordinate getUrgentMove(Grid g, Case playerToMove) {
     for (int i = 0; i < SIZE; i++) {
         for (int j = 0; j < SIZE; j++) {
             if (g[i][j] == empty) {
-                g[i][j] = playerToMove;
-                if (isWinner(g) == playerToMove) {
-                    g[i][j] = empty;
-                    return (Coordinate){i, j};
-                }
-                g[i][j] = empty;
+                Coordinate c = {i, j};
+                if (isWinningMove(g, c, playerToMove)) return c;
             }
         }
     }
@@ -499,12 +544,8 @@ Coordinate getUrgentMove(Grid g, Case playerToMove) {
     for (int i = 0; i < SIZE; i++) {
         for (int j = 0; j < SIZE; j++) {
             if (g[i][j] == empty) {
-                g[i][j] = opponent;
-                if (isWinner(g) == opponent) {
-                    g[i][j] = empty;
-                    return (Coordinate){i, j};
-                }
-                g[i][j] = empty;
+                Coordinate c = {i, j};
+                if (isWinningMove(g, c, opponent)) return c;
             }
         }
     }

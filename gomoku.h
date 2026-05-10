@@ -47,3 +47,4 @@ typedef struct node *Tree;
 
 bool hasNeighbor(Grid grid, int r, int c);
 Coordinate getUrgentMove(Grid g, Case playerToMove);
+bool isWinningMove(Grid g, Coordinate c, Case player);
