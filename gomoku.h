@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 #define SIZE 10
 #define VICTORY 5
 
@@ -42,3 +44,6 @@ struct node
 };
 
 typedef struct node *Tree;
+
+bool hasNeighbor(Grid grid, int r, int c);
+Coordinate getUrgentMove(Grid g, Case playerToMove);
