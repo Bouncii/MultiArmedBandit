@@ -215,13 +215,30 @@ Tree createNode(Coordinate move, Case player, Tree parent) {
 }
 
 void fillUntriedMoves(Tree node, Grid grid) {
+    Case playerToMove = (node->playerTurn == Bot) ? Player : Bot;
+    Coordinate urgent = getUrgentMove(grid, playerToMove);
+    
+    if (urgent.ligne != -1) {
+        addPossibility(&(node->untriedMoves), urgent);
+        return; 
+    }
+
+    bool isBoardEmpty = true;
     for (int i = 0; i < SIZE; i++) {
         for (int j = 0; j < SIZE; j++) {
             if (grid[i][j] == empty) {
-                Coordinate co = {i, j};
-                addPossibility(&(node->untriedMoves), co);
+                if (hasNeighbor(grid, i, j)) {
+                    Coordinate co = {i, j};
+                    addPossibility(&(node->untriedMoves), co);
+                }
+            } else {
+                isBoardEmpty = false;
             }
         }
+    }
+    if (isBoardEmpty) {
+        Coordinate center = {SIZE/2, SIZE/2};
+        addPossibility(&(node->untriedMoves), center);
     }
 }
 
@@ -262,23 +279,38 @@ Case simulate(Grid grid, Case nextToPlay) {
     Grid tempGrid;
     copyGrid(grid, tempGrid);
     
+    Coordinate emptyCases[SIZE * SIZE];
+    int nbEmpty = 0;
+    
+    for (int i = 0; i < SIZE; i++) {
+        for (int j = 0; j < SIZE; j++) {
+            if (tempGrid[i][j] == empty) {
+                emptyCases[nbEmpty].ligne = i;
+                emptyCases[nbEmpty].colonne = j;
+                nbEmpty++;
+            }
+        }
+    }
+
+    for (int i = nbEmpty - 1; i > 0; i--) {
+        int j = randint(0, i);
+        Coordinate temp = emptyCases[i];
+        emptyCases[i] = emptyCases[j];
+        emptyCases[j] = temp;
+    }
+
     Case winner = isWinner(tempGrid);
     Case currentPlayer = nextToPlay;
-    int movesCount = 0;
-    int maxMoves = SIZE * SIZE;
+    int index = 0;
 
-    while (winner == empty && movesCount < maxMoves) {
-        int r = randint(0, SIZE - 1);
-        int c = randint(0, SIZE - 1);
-
-        if (tempGrid[r][c] == empty) {
-            Coordinate move = {r, c};
-            placePawn(tempGrid, currentPlayer, move);
-            
-            winner = isWinner(tempGrid);
-            currentPlayer = (currentPlayer == Bot) ? Player : Bot;
-        }
-        movesCount++; 
+    while (winner == empty && index < nbEmpty) {
+        Coordinate move = emptyCases[index];
+        placePawn(tempGrid, currentPlayer, move);
+        
+        winner = isWinner(tempGrid);
+        currentPlayer = (currentPlayer == Bot) ? Player : Bot;
+        
+        index++; 
     }
     return winner;
 }
@@ -289,11 +321,20 @@ void backpropagate(Tree node, Case winner) {
     while (current != NULL) {
         current->nbTest++;
         
-        if (winner == Bot) {
-            current->score += 1.0;
-        } else if (winner == empty) {
+        if (winner == empty) {
             current->score += 0.5;
+        } 
+        else if (winner == current->playerTurn) {
+            current->score += 1.0; 
+        } 
+        else {
+            if (current->playerTurn == Bot && winner == Player) {
+                current->score -= 10000.0;
+            } else {
+                current->score -= 1.0;
+            }
         }
+        
         current = current->parent;
     }
 }
@@ -301,7 +342,7 @@ void backpropagate(Tree node, Case winner) {
 // algo UCB
 Tree selectBestChildUCB(Tree node, float explorationParameter) {
     Tree bestChild = NULL;
-    float bestScore = -1.0;
+    float bestScore = -1000000.0;
 
     for (int i = 0; i < node->numChildren; i++) {
         Tree child = node->children[i];
@@ -310,7 +351,7 @@ Tree selectBestChildUCB(Tree node, float explorationParameter) {
         float exploration = explorationParameter * sqrt(log((float)node->nbTest) / (float)child->nbTest);
         float ucbValue = exploitation + exploration;
 
-        if (ucbValue > bestScore) {
+        if (bestChild == NULL || ucbValue > bestScore) {
             bestScore = ucbValue;
             bestChild = child;
         }
@@ -348,37 +389,71 @@ void freeTree(Tree node) {
     free(node);
 }
 
-//Bouvle princiaple lors du tour de l'ia
-Coordinate mcts_ai_turn(Grid grid, int iterations) {
-    // La racine représente l'état actuel après le coup du joueur
-    Tree root = createNode((Coordinate){-1, -1}, Player, NULL);
-    fillUntriedMoves(root, grid);
 
+// Conserve uniquement le nœud correspondant au coup joué et libère tout le reste
+Tree keepChildAndFreeRest(Tree root, Coordinate move) {
+    if (root == NULL) return NULL;
+    Tree nextRoot = NULL;
+
+    for (int i = 0; i < root->numChildren; i++) {
+        if (coordinatesEquals(root->children[i]->move, move)) {
+            nextRoot = root->children[i];
+        } else {
+            freeTree(root->children[i]); 
+        }
+    }
+    
+    free(root->children);
+    Possibilities p = root->untriedMoves;
+    while (p != NULL) {
+        struct location *temp = p;
+        p = p->suiv;
+        free(temp);
+    }
+    free(root);
+
+    if (nextRoot != NULL) {
+        nextRoot->parent = NULL;
+    }
+
+    return nextRoot;
+}
+
+//Bouvle princiaple lors du tour de l'ia
+Coordinate mcts_ai_turn(Grid grid, int iterations, Tree root) {
     for (int i = 0; i < iterations; i++) {
         Tree current = root;
 
+        // 1. Sélection (Descente)
         while (current->untriedMoves == NULL && current->numChildren > 0) {
             current = selectBestChildUCB(current, 1.41);
             placePawn(grid, current->playerTurn, current->move);
         }
 
         Case winner = isWinner(grid);
+
+        if (winner == empty && current->untriedMoves == NULL && current->numChildren == 0) {
+            fillUntriedMoves(current, grid);
+        }
+
+        // 2. Expansion
         if (winner == empty && current->untriedMoves != NULL) {
             Tree child = expand(current, grid);
             current = child;
             placePawn(grid, current->playerTurn, current->move);
+            winner = isWinner(grid);
         }
 
-        Case nextToPlay;
-        if(current->playerTurn == Bot){
-            nextToPlay = Player;
-        }else{
-            nextToPlay = Bot;
+        // 3. Simulation (Un seul appel suffit !)
+        if (winner == empty) {
+            Case nextToPlay = (current->playerTurn == Bot) ? Player : Bot;
+            winner = simulate(grid, nextToPlay);
         }
-        winner = simulate(grid, nextToPlay);
+
+        // 4. Rétropropagation et Nettoyage de la grille
+        backpropagate(current, winner);
 
         while (current != NULL) {
-            backpropagate(current, winner);
             if (current->parent != NULL) {
                 removePawn(grid, current->move);
             }
@@ -386,9 +461,55 @@ Coordinate mcts_ai_turn(Grid grid, int iterations) {
         }
     }
 
-    Coordinate finalMove = getBestMove(root);
-    freeTree(root); 
-    return finalMove;
+    return getBestMove(root);
+}
+
+bool hasNeighbor(Grid grid, int r, int c) {
+    for (int i = -2; i <= 2; i++) {
+        for (int j = -2; j <= 2; j++) {
+            if (i == 0 && j == 0) continue;
+            int nr = r + i;
+            int nc = c + j;
+            if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE) {
+                if (grid[nr][nc] != empty) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+Coordinate getUrgentMove(Grid g, Case playerToMove) {
+    Case opponent = (playerToMove == Bot) ? Player : Bot;
+
+    for (int i = 0; i < SIZE; i++) {
+        for (int j = 0; j < SIZE; j++) {
+            if (g[i][j] == empty) {
+                g[i][j] = playerToMove;
+                if (isWinner(g) == playerToMove) {
+                    g[i][j] = empty;
+                    return (Coordinate){i, j};
+                }
+                g[i][j] = empty;
+            }
+        }
+    }
+
+    for (int i = 0; i < SIZE; i++) {
+        for (int j = 0; j < SIZE; j++) {
+            if (g[i][j] == empty) {
+                g[i][j] = opponent;
+                if (isWinner(g) == opponent) {
+                    g[i][j] = empty;
+                    return (Coordinate){i, j};
+                }
+                g[i][j] = empty;
+            }
+        }
+    }
+
+    return (Coordinate){-1, -1};
 }
 
 int main() {
@@ -397,6 +518,7 @@ int main() {
     int moves = 0;
     int maxMoves = SIZE * SIZE;
     Coordinate coord;
+    Tree root = NULL;
 
     srand(time(NULL));
     initGrille(g);
@@ -417,14 +539,28 @@ int main() {
         placePawn(g, Player, coord);
         moves++;
 
+        if (root != NULL) {
+            root = keepChildAndFreeRest(root, coord);
+        }
+
         winner = isWinner(g);
 
         if (winner == empty && moves < maxMoves){
             printf("Le Bot reflechit...\n");
-            coord = mcts_ai_turn(g, 100000);
+
+            if (root == NULL) {
+                root = createNode((Coordinate){-1, -1}, Player, NULL);
+                fillUntriedMoves(root, g);
+            }
+            coord = mcts_ai_turn(g, 50000, root);
+
             printf("Le Bot joue en : %d %d\n", coord.ligne, coord.colonne);
             placePawn(g, Bot, coord);
             moves++;
+
+            if (root != NULL) {
+                root = keepChildAndFreeRest(root, coord); 
+            }
 
             winner = isWinner(g);
         }
